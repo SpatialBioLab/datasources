@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dataset Selection Guide</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f7f8fa; }
+    .seg-hover { cursor: pointer; }
+    .seg-hover:hover { opacity: 0.85; }
+    .filter-btn {
+      transition: all 0.18s;
+      border: 2px solid;
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 5px 13px;
+      border-radius: 20px;
+      letter-spacing: 0.04em;
+    }
+    .filter-btn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+    #tooltip {
+      position: fixed;
+      display: none;
+      background: white;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+      font-size: 12px;
+      font-family: 'DM Sans', sans-serif;
+      max-width: 280px;
+      z-index: 9999;
+      pointer-events: none;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <div id="tooltip"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    const datasets = [
+      {id:1,group:"CrossClim-TS",source:"GISTEMP",type:"climate",realm:"terrestrial, ocean",method:"multi-source integration",period:"1880-present",temporalRes:"monthly, annually",spatialRes:"1°",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:2,group:"CrossClim-TS",source:"CMIP6",type:"climate",realm:"terrestrial, ocean",method:"circulation model",period:"1850-present",temporalRes:"monthly",spatialRes:"1°",future:true,past:true,bioclim:false,otherVars:true,ts:true},
+      {id:3,group:"CrossClim-TS",source:"ERA5",type:"climate",realm:"terrestrial, ocean",method:"reanalysis",period:"1940-present",temporalRes:"daily, monthly",spatialRes:"31 km",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:4,group:"CrossClim-TS",source:"NEX-GDDP-CMIP6",type:"climate",realm:"terrestrial, ocean",method:"downscaling",period:"1950-present",temporalRes:"daily",spatialRes:"0.25°",future:true,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:5,group:"CrossClim-TS",source:"NCEP/NCAR Reanalysis",type:"climate",realm:"terrestrial, ocean",method:"reanalysis",period:"1948-present",temporalRes:"daily",spatialRes:"2.5°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:6,group:"CrossClim-TS",source:"SMOS",type:"climate, oceanography",realm:"terrestrial, ocean",method:"remote sensing",period:"2010-present",temporalRes:"3-days, 10-days, monthly",spatialRes:"25-50 km",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:7,group:"CrossCover",source:"Global Mangrove Watch",type:"land cover",realm:"terrestrial, ocean",method:"radar + optical remote sensing",period:"1996-2020",temporalRes:"static",spatialRes:"25 m",future:false,past:false,bioclim:false,otherVars:true,ts:false},
+      {id:8,group:"CrossCover-TS",source:"LC-CCI",type:"land cover",realm:"terrestrial, ocean, freshwater",method:"optical remote sensing",period:"1992-present",temporalRes:"annually",spatialRes:"300 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:9,group:"CrossElev",source:"ETOPO",type:"elevation",realm:"terrestrial, ocean",method:"compilation + interpolation",period:"1988-2021",temporalRes:"static",spatialRes:"15''",future:false,past:false,bioclim:false,otherVars:true,ts:false},
+      {id:10,group:"CrossElev",source:"GCC",type:"elevation, climate, oceanography",realm:"terrestrial, ocean",method:"optical remote sensing + compilation",period:"several",temporalRes:"static",spatialRes:"1 km",future:false,past:false,bioclim:false,otherVars:true,ts:false},
+      {id:11,group:"CrossElev",source:"SRTM15+",type:"elevation",realm:"terrestrial, ocean, freshwater",method:"radar + altimetry + interpolation",period:"2000-2023",temporalRes:"static",spatialRes:"15''",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:12,group:"CrossElev-TS",source:"ICESat-2",type:"elevation, vegetation structure",realm:"terrestrial, ocean",method:"lidar remote sensing",period:"2018-present",temporalRes:"daily",spatialRes:"20 m",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:13,group:"FwCover",source:"GLWD",type:"land cover",realm:"freshwater",method:"optical + compilation",period:"1990-2020",temporalRes:"static",spatialRes:"15''",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:14,group:"FwCover",source:"ESA Global Water Bodies",type:"land cover",realm:"freshwater",method:"radar + optical remote sensing",period:"2005-2010",temporalRes:"static",spatialRes:"300 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:15,group:"FwCover",source:"G3WBM/G1WBM",type:"land cover",realm:"freshwater",method:"optical remote sensing",period:"1990-2010",temporalRes:"static",spatialRes:"1-3''",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:16,group:"FwCover",source:"Global seasonal dynamics of inland water",type:"land cover",realm:"freshwater",method:"optical remote sensing",period:"2019",temporalRes:"monthly",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:17,group:"FwHydro",source:"HydroSHEDS",type:"elevation, hydrology",realm:"freshwater",method:"radar remote sensing",period:"2000",temporalRes:"static",spatialRes:"3-6'",future:false,past:false,bioclim:false,otherVars:true,ts:false},
+      {id:18,group:"FwHydro",source:"MERIT Hydro",type:"elevation, hydrology",realm:"freshwater",method:"radar + optical remote sensing",period:"several",temporalRes:"static",spatialRes:"3''",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:19,group:"FwHydro",source:"EarthEnv Freshwater",type:"elevation, hydrology, climate, land cover, geology, soil",realm:"freshwater",method:"multi-source integration",period:"several",temporalRes:"static",spatialRes:"1 km",future:false,past:false,bioclim:true,otherVars:true,ts:false},
+      {id:20,group:"FwHydro-TS",source:"LSWT",type:"climate",realm:"freshwater",method:"optical remote sensing",period:"1995-present",temporalRes:"daily",spatialRes:"5 km",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:21,group:"FwHydro-TS",source:"Global Surface Water Explorer",type:"hydrology",realm:"freshwater",method:"optical remote sensing",period:"1984-2021",temporalRes:"monthly, annually",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:22,group:"FwQuality-TS",source:"Freshwater Ecosystems Explorer",type:"hydrology, water quality",realm:"freshwater",method:"multi-source integration",period:"2000-2019",temporalRes:"5-years",spatialRes:"points",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:23,group:"FwQuality-TS",source:"GEMStat",type:"water quality",realm:"freshwater",method:"compilation",period:"1906-2024",temporalRes:"daily",spatialRes:"points",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:24,group:"OcnBathy",source:"GEBCO",type:"elevation",realm:"ocean",method:"multi-source integration",period:"several",temporalRes:"static",spatialRes:"15''",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:25,group:"OcnBathy",source:"EMODnet Bathymetry",type:"elevation",realm:"ocean",method:"multi-source integration + interpolation",period:"several",temporalRes:"static",spatialRes:"1/16-15'",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:26,group:"OcnBathy",source:"Global Coastal Bathymetry",type:"elevation",realm:"ocean",method:"optical remote sensing",period:"2019-2024",temporalRes:"static",spatialRes:"100 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:27,group:"OcnBiogeo-TS",source:"Global Mapped Carbon Data",type:"oceanography",realm:"ocean",method:"optical remote sensing",period:"2024-present",temporalRes:"daily",spatialRes:"0.04°",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:28,group:"OcnBiogeo-TS",source:"CMEMS Surface Ocean Carbon",type:"oceanography",realm:"ocean",method:"interpolation",period:"1985-present",temporalRes:"monthly",spatialRes:"0.25°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:29,group:"OcnBiogeo-TS",source:"CMEMS Global Ocean Biogeochemistry",type:"oceanography, biogeochemistry",realm:"ocean",method:"biogeochemical modelling",period:"1993-present",temporalRes:"daily, monthly",spatialRes:"0.25°",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:30,group:"OcnBiogeo-TS",source:"CMEMS Global Low and Mid Trophic Levels",type:"oceanography, biogeochemistry",realm:"ocean",method:"modelling",period:"1998-2024",temporalRes:"daily",spatialRes:"0.083°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:31,group:"OcnClim",source:"MARSPEC",type:"climate",realm:"ocean",method:"modelling",period:"1980-2010",temporalRes:"static",spatialRes:"30''-5'",future:false,past:true,bioclim:true,otherVars:true,ts:false},
+      {id:32,group:"OcnClim",source:"Bio-Oracle",type:"climate, oceanography",realm:"ocean",method:"modelling",period:"2000-2020",temporalRes:"static",spatialRes:"3-5'",future:true,past:false,bioclim:false,otherVars:true,ts:false},
+      {id:33,group:"OcnClim-TS",source:"HadISST",type:"climate",realm:"ocean",method:"remote sensing + interpolation",period:"1871-present",temporalRes:"monthly",spatialRes:"1°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:34,group:"OcnClim-TS",source:"NOAA OISST",type:"climate",realm:"ocean",method:"remote sensing + interpolation",period:"1981-present",temporalRes:"daily, weekly",spatialRes:"0.25°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:35,group:"OcnClim-TS",source:"GHRSST",type:"climate",realm:"ocean",method:"remote sensing + interpolation",period:"2002-present",temporalRes:"daily",spatialRes:"0.01°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:36,group:"OcnHuman",source:"Cumulative Impacts to Global Marine Ecosystems",type:"human pressure",realm:"ocean",method:"modelling",period:"2010-2020",temporalRes:"static",spatialRes:"10 km",future:true,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:37,group:"OcnHuman-TS",source:"Global Fishing Watch",type:"human pressure",realm:"ocean",method:"radar + optical remote sensing",period:"2012-present",temporalRes:"daily",spatialRes:"0.1°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:38,group:"OcnPhys-TS",source:"CMEMS Global Ocean Physics",type:"oceanography",realm:"ocean",method:"radar + optical + reanalysis",period:"1980-present",temporalRes:"6-hourly, daily, monthly",spatialRes:"1/12-1/4°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:39,group:"OcnPhys-TS",source:"OSCAR",type:"oceanography",realm:"ocean",method:"radar + optical + wind forcing",period:"1990-present",temporalRes:"daily, weekly, monthly",spatialRes:"0.25°",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:40,group:"OcnPhys-TS",source:"HYCOM",type:"oceanography",realm:"ocean",method:"hydrodynamic modelling",period:"1993-present",temporalRes:"daily",spatialRes:"1/12°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:41,group:"OcnPhys-TS",source:"GLOBCURRENT",type:"oceanography",realm:"ocean",method:"radar + wind forcing + drifters",period:"1993-present",temporalRes:"hourly, daily, monthly",spatialRes:"1/4°",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:42,group:"OcnPhys-TS",source:"OLTraj",type:"oceanography",realm:"ocean",method:"hydrodynamic modelling",period:"1998-2019",temporalRes:"monthly",spatialRes:"1/8°",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:43,group:"OcnPhys-TS",source:"CMEMS Sea Level L4",type:"oceanography",realm:"ocean",method:"radar + interpolation",period:"1993-present",temporalRes:"daily",spatialRes:"0.125°",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:44,group:"OcnPhys-TS",source:"CMEMS Global Ocean Waves",type:"oceanography",realm:"ocean",method:"hydrodynamic modelling",period:"1980-present",temporalRes:"hourly, monthly",spatialRes:"0.2°",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:45,group:"TerClim",source:"WorldClim",type:"climate",realm:"terrestrial",method:"interpolation",period:"1970-2000",temporalRes:"monthly",spatialRes:"30''",future:true,past:true,bioclim:true,otherVars:true,ts:false},
+      {id:46,group:"TerClim",source:"Envirem",type:"climate",realm:"terrestrial",method:"interpolation",period:"1960-1990",temporalRes:"static",spatialRes:"30''",future:false,past:true,bioclim:true,otherVars:true,ts:false},
+      {id:47,group:"TerClim",source:"MERRAclim",type:"climate",realm:"terrestrial",method:"reanalysis",period:"1980s-2000s",temporalRes:"static",spatialRes:"2.5'",future:false,past:false,bioclim:true,otherVars:true,ts:false},
+      {id:48,group:"TerClim",source:"CliMond",type:"climate",realm:"terrestrial",method:"interpolation",period:"1975, 1961-1990",temporalRes:"static",spatialRes:"10'",future:true,past:false,bioclim:true,otherVars:false,ts:false},
+      {id:49,group:"TerClim-TS",source:"ERA5-Land",type:"climate",realm:"terrestrial",method:"reanalysis",period:"1950-present",temporalRes:"hourly",spatialRes:"0.1°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:50,group:"TerClim-TS",source:"CRU TS",type:"climate",realm:"terrestrial",method:"interpolation",period:"1901-present",temporalRes:"monthly",spatialRes:"0.5°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:51,group:"TerClim-TS",source:"CHELSA-monthly",type:"climate",realm:"terrestrial",method:"downscaling",period:"1979-2021",temporalRes:"monthly",spatialRes:"30''",future:false,past:false,bioclim:true,otherVars:true,ts:true},
+      {id:52,group:"TerClim-TS",source:"CHELSA-daily",type:"climate",realm:"terrestrial",method:"downscaling",period:"1979-2025",temporalRes:"daily",spatialRes:"30''",future:false,past:false,bioclim:true,otherVars:true,ts:true},
+      {id:53,group:"TerClim-TS",source:"CHELSA-W5E5",type:"climate",realm:"terrestrial",method:"reanalysis",period:"1979-2016",temporalRes:"daily",spatialRes:"30''",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:54,group:"TerClim-TS",source:"CHELSA-EarthEnv",type:"climate",realm:"terrestrial",method:"downscaling",period:"2003-2016",temporalRes:"daily",spatialRes:"30''",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:55,group:"TerClim-TS",source:"CHELSAcruts",type:"climate",realm:"terrestrial",method:"interpolation",period:"1901-2016",temporalRes:"monthly",spatialRes:"30''",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:56,group:"TerClim-TS",source:"CHELSA BIOCLIM+",type:"climate",realm:"terrestrial",method:"interpolation",period:"1980-2018",temporalRes:"monthly",spatialRes:"30''",future:true,past:true,bioclim:true,otherVars:true,ts:true},
+      {id:57,group:"TerClim-TS",source:"CHELSA-climatologies",type:"climate",realm:"terrestrial",method:"circulation model",period:"1981-2010",temporalRes:"monthly",spatialRes:"30''",future:true,past:true,bioclim:true,otherVars:true,ts:true},
+      {id:58,group:"TerClim-TS",source:"CHELSA-drought-indices",type:"climate",realm:"terrestrial",method:"circulation model",period:"1980-2018",temporalRes:"monthly",spatialRes:"30''",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:59,group:"TerClim-TS",source:"TerraClimate",type:"climate",realm:"terrestrial",method:"interpolation",period:"1958-present",temporalRes:"monthly, annually",spatialRes:"4 km",future:false,past:false,bioclim:true,otherVars:true,ts:true},
+      {id:60,group:"TerDist",source:"PEST-CHEMGRIDS",type:"human pressure",realm:"terrestrial",method:"multi-source integration",period:"2015-2025",temporalRes:"5-yearly",spatialRes:"10 km",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:61,group:"TerDist",source:"Global Human Modification",type:"human pressure",realm:"terrestrial",method:"compilation + remote sensing + modelling",period:"1990-2022",temporalRes:"static",spatialRes:"90 m",future:false,past:false,bioclim:false,otherVars:true,ts:false},
+      {id:62,group:"TerDist",source:"Travel Time to Major Cities",type:"human pressure",realm:"terrestrial",method:"modelling",period:"2000",temporalRes:"static",spatialRes:"30''",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:63,group:"TerDist",source:"GRIP",type:"human pressure, land use",realm:"terrestrial",method:"compilation",period:"2000-2015",temporalRes:"static",spatialRes:"8 km",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:64,group:"TerDist-TS",source:"Global forest loss due to fire",type:"disturbance",realm:"terrestrial",method:"optical remote sensing",period:"2001-present",temporalRes:"annually",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:65,group:"TerDist-TS",source:"MODIS Burned Areas",type:"disturbance",realm:"terrestrial",method:"optical remote sensing",period:"2000-present",temporalRes:"monthly",spatialRes:"500 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:66,group:"TerDist-TS",source:"FIRMS",type:"disturbance",realm:"terrestrial",method:"optical remote sensing",period:"2012-present",temporalRes:"daily",spatialRes:"375 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:67,group:"TerDist-TS",source:"FireCCI",type:"disturbance",realm:"terrestrial",method:"optical remote sensing",period:"1982-2024",temporalRes:"monthly, annually",spatialRes:"250 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:68,group:"TerDist-TS",source:"GFED",type:"disturbance",realm:"terrestrial",method:"optical remote sensing + modelling",period:"1997-present",temporalRes:"monthly",spatialRes:"0.25°",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:69,group:"TerDist-TS",source:"WorldPop Global Population",type:"human pressure",realm:"terrestrial",method:"modelling",period:"2015-2030",temporalRes:"annually",spatialRes:"100 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:70,group:"TerDist-TS",source:"LandScan Global",type:"human pressure",realm:"terrestrial",method:"modelling",period:"2000-present",temporalRes:"annually",spatialRes:"30''",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:71,group:"TerDist-TS",source:"Global Human Footprint",type:"human pressure",realm:"terrestrial",method:"multi-source integration",period:"2000-2018",temporalRes:"annually",spatialRes:"1 km",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:72,group:"TerDist-TS",source:"Harmonized Global Night-Time Lights",type:"human pressure",realm:"terrestrial",method:"optical remote sensing",period:"1992-2024",temporalRes:"monthly",spatialRes:"30''",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:73,group:"TerDist-TS",source:"Global Gridded Livestock",type:"human pressure",realm:"terrestrial",method:"modelling",period:"1961-2021",temporalRes:"annually",spatialRes:"5 km",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:74,group:"TerDist-TS",source:"GHSL",type:"human pressure, land use",realm:"terrestrial",method:"optical remote sensing + modelling",period:"1975-present",temporalRes:"5-yearly",spatialRes:"10 m",future:true,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:75,group:"TerDist-TS",source:"DIST-ALERT",type:"land cover, disturbance",realm:"terrestrial",method:"optical remote sensing",period:"2022-present",temporalRes:"daily",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:76,group:"TerElev",source:"SRTM",type:"elevation",realm:"terrestrial",method:"radar remote sensing",period:"2000",temporalRes:"static",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:77,group:"TerElev",source:"ASTER GDEM",type:"elevation",realm:"terrestrial",method:"optical remote sensing",period:"2000-2013",temporalRes:"static",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:78,group:"TerElev",source:"NASADEM",type:"elevation",realm:"terrestrial",method:"radar remote sensing",period:"2012",temporalRes:"static",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:79,group:"TerElev",source:"TanDEM-X DEM",type:"elevation",realm:"terrestrial",method:"radar remote sensing",period:"2010-2015",temporalRes:"static",spatialRes:"12 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:80,group:"TerElev",source:"Copernicus DEM",type:"elevation",realm:"terrestrial",method:"radar remote sensing",period:"2010-2015",temporalRes:"static",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:81,group:"TerElev",source:"GMTED2010",type:"elevation",realm:"terrestrial",method:"multi-source integration",period:"1994-2008",temporalRes:"static",spatialRes:"250 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:82,group:"TerElev",source:"AW3D30",type:"elevation",realm:"terrestrial",method:"optical remote sensing",period:"2006-2011",temporalRes:"static",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:83,group:"TerElev",source:"MERIT DEM",type:"elevation",realm:"terrestrial",method:"radar remote sensing",period:"2000-2011",temporalRes:"static",spatialRes:"90 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:84,group:"TerElev",source:"GTOPO30",type:"elevation",realm:"terrestrial",method:"multi-source integration",period:"1960-1994",temporalRes:"static",spatialRes:"1 km",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:85,group:"TerElev",source:"GEDTM",type:"elevation",realm:"terrestrial",method:"lidar + radar + optical",period:"2011-2023",temporalRes:"static",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:86,group:"TerElev",source:"FABDEM",type:"elevation",realm:"terrestrial",method:"radar remote sensing",period:"2011-2015",temporalRes:"static",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:87,group:"TerElev",source:"Fathom DEM",type:"elevation",realm:"terrestrial",method:"lidar + radar + optical",period:"2011-2025",temporalRes:"static",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:88,group:"TerElev-TS",source:"ASTER",type:"elevation",realm:"terrestrial",method:"optical remote sensing",period:"2000-present",temporalRes:"on-demand, 16-days",spatialRes:"15 m",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:89,group:"TerLULC",source:"GFCC Tree Cover",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"2000-2015",temporalRes:"5-yearly",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:90,group:"TerLULC",source:"EarthEnv Habitat Heterogeneity",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"2001-2005",temporalRes:"static",spatialRes:"1 km",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:91,group:"TerLULC",source:"ESA WorldCover",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"2020-2021",temporalRes:"static",spatialRes:"10 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:92,group:"TerLULC",source:"GLCC",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"1992-1993",temporalRes:"static",spatialRes:"1 km",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:93,group:"TerLULC",source:"GLC-SHARE",type:"land cover",realm:"terrestrial",method:"multi-source integration",period:"2014",temporalRes:"static",spatialRes:"1 km",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:94,group:"TerLULC",source:"EarthEnv Global Land Cover",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"1992-2012",temporalRes:"static",spatialRes:"1 km",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:95,group:"TerLULC",source:"Geo-Wiki",type:"land cover",realm:"terrestrial",method:"multi-source integration",period:"2009-present",temporalRes:"static",spatialRes:"variable",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:96,group:"TerLULC",source:"UMD Land Cover",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"1984-1993",temporalRes:"static",spatialRes:"100 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:97,group:"TerLULC",source:"ISLSCP II UMD Global Land Cover",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"1992-1993",temporalRes:"static",spatialRes:"0.25°",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:98,group:"TerLULC",source:"GLC2000",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"2000",temporalRes:"static",spatialRes:"1 km",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:99,group:"TerLULC",source:"GLCNMO",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"2003, 2008, 2013",temporalRes:"static",spatialRes:"500 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:100,group:"TerLULC",source:"GlobeLand30",type:"land use",realm:"terrestrial",method:"optical remote sensing",period:"2000, 2010",temporalRes:"static",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:101,group:"TerLULC",source:"SPAM",type:"land use",realm:"terrestrial",method:"modelling",period:"2000-2020",temporalRes:"static",spatialRes:"10 km",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:102,group:"TerLULC",source:"GHG Emissions on Croplands",type:"land use",realm:"terrestrial",method:"modelling",period:"1997-2003",temporalRes:"static",spatialRes:"10 km",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:103,group:"TerLULC",source:"Harvested Area and Yield",type:"land use",realm:"terrestrial",method:"modelling",period:"1997-2003",temporalRes:"static",spatialRes:"10 km",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:104,group:"TerLULC-TS",source:"MODIS Land Cover",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"2001-present",temporalRes:"annually",spatialRes:"500 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:105,group:"TerLULC-TS",source:"Copernicus Global Dynamic Land Cover",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"2015-present",temporalRes:"annually",spatialRes:"10 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:106,group:"TerLULC-TS",source:"Dynamic World",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"2015-present",temporalRes:"daily, weekly",spatialRes:"10 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:107,group:"TerLULC-TS",source:"GLC-FSC30D",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"1985-2022",temporalRes:"annually",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:108,group:"TerLULC-TS",source:"Esri Land Cover",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"2017-2024",temporalRes:"annually",spatialRes:"10 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:109,group:"TerLULC-TS",source:"GLCLUC2020",type:"land cover",realm:"terrestrial",method:"optical remote sensing",period:"2000-2020",temporalRes:"5-yearly",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:110,group:"TerLULC-TS",source:"HYDE",type:"land use",realm:"terrestrial",method:"modelling",period:"10000 BC-2000 AD",temporalRes:"100-1000 yearly",spatialRes:"5'",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:111,group:"TerLULC-TS",source:"GAIA",type:"land use",realm:"terrestrial",method:"optical remote sensing",period:"1985-2022",temporalRes:"annually",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:112,group:"TerPaleo",source:"Paleoclim",type:"climate",realm:"terrestrial",method:"circulation model",period:"Pleistocene, Pliocene",temporalRes:"static",spatialRes:"2.5'",future:false,past:true,bioclim:true,otherVars:false,ts:false},
+      {id:113,group:"TerPaleo-TS",source:"CHELSA-TraCE21k",type:"climate",realm:"terrestrial",method:"circulation model",period:"LGM-present",temporalRes:"monthly",spatialRes:"30''",future:false,past:true,bioclim:false,otherVars:true,ts:true},
+      {id:114,group:"TerPaleo-TS",source:"CHELSA-TraCE21k-bioclim",type:"climate",realm:"terrestrial",method:"circulation model",period:"LGM-present",temporalRes:"monthly",spatialRes:"30''",future:false,past:true,bioclim:true,otherVars:true,ts:true},
+      {id:115,group:"TerPaleo-TS",source:"Oscillayers",type:"climate",realm:"terrestrial",method:"circulation model",period:"5.4 Ma-present",temporalRes:"static",spatialRes:"2.5'",future:false,past:true,bioclim:true,otherVars:true,ts:true},
+      {id:116,group:"TerPaleo-TS",source:"PALEO-PGEM-Series",type:"climate",realm:"terrestrial",method:"circulation model",period:"5 Ma-present",temporalRes:"static",spatialRes:"1°",future:false,past:true,bioclim:true,otherVars:true,ts:true},
+      {id:117,group:"TerPaleo-TS",source:"PaleoView",type:"climate",realm:"terrestrial",method:"circulation model",period:"21 ka-present",temporalRes:"monthly",spatialRes:"2.5'",future:false,past:true,bioclim:true,otherVars:true,ts:true},
+      {id:118,group:"TerPaleo-TS",source:"HadCM3 800 ka",type:"climate",realm:"terrestrial",method:"circulation model",period:"800 ka-present",temporalRes:"1000 years",spatialRes:"0.5°",future:false,past:true,bioclim:true,otherVars:true,ts:true},
+      {id:119,group:"TerPaleo-TS",source:"HadCM3 120 ka",type:"climate",realm:"terrestrial",method:"circulation model",period:"20 ka-present",temporalRes:"1000 years",spatialRes:"0.5°",future:false,past:true,bioclim:true,otherVars:true,ts:true},
+      {id:120,group:"TerSoil",source:"GLiM",type:"geology",realm:"terrestrial",method:"multi-source integration",period:"",temporalRes:"static",spatialRes:"0.5°",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:121,group:"TerSoil",source:"HWSD",type:"soil",realm:"terrestrial",method:"multi-source integration",period:"",temporalRes:"static",spatialRes:"30''",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:122,group:"TerSoil",source:"SoilGrids",type:"soil",realm:"terrestrial",method:"modelling",period:"",temporalRes:"static",spatialRes:"250 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:123,group:"TerSoil",source:"GSDE",type:"soil",realm:"terrestrial",method:"multi-source integration",period:"",temporalRes:"static",spatialRes:"30''",future:false,past:false,bioclim:false,otherVars:true,ts:false},
+      {id:124,group:"TerVeg",source:"Global Aboveground/Belowground Biomass Carbon",type:"vegetation structure",realm:"terrestrial",method:"optical remote sensing",period:"2010",temporalRes:"static",spatialRes:"300 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:125,group:"TerVeg",source:"Global Forest Canopy Height",type:"vegetation structure",realm:"terrestrial",method:"lidar + modelling",period:"2019",temporalRes:"static",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:126,group:"TerVeg",source:"High-Resolution Canopy Height Model",type:"vegetation structure",realm:"terrestrial",method:"lidar + modelling",period:"2020",temporalRes:"static",spatialRes:"10 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:127,group:"TerVeg",source:"ESA GlobBiomass",type:"vegetation structure",realm:"terrestrial",method:"radar + modelling",period:"2010",temporalRes:"static",spatialRes:"150 m",future:false,past:false,bioclim:false,otherVars:false,ts:false},
+      {id:128,group:"TerVeg-TS",source:"Global Vegetation Greenness",type:"vegetation structure",realm:"terrestrial",method:"optical remote sensing",period:"1981-2022",temporalRes:"2-weekly",spatialRes:"0.083°",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:129,group:"TerVeg-TS",source:"Global Salt Marsh Change",type:"vegetation structure",realm:"terrestrial",method:"optical remote sensing",period:"2000-2019",temporalRes:"5-yearly",spatialRes:"30 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:130,group:"TerVeg-TS",source:"Forest Area, Carbon Stocks, and Biomass",type:"vegetation structure",realm:"terrestrial",method:"compilation",period:"1950-2010",temporalRes:"5-yearly",spatialRes:"1°",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:131,group:"TerVeg-TS",source:"GEDI",type:"vegetation structure",realm:"terrestrial",method:"lidar remote sensing",period:"2019-present",temporalRes:"weekly, monthly",spatialRes:"25 m",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+      {id:132,group:"TerVeg-TS",source:"PROBA-V",type:"vegetation structure",realm:"terrestrial",method:"optical remote sensing",period:"2013-2020",temporalRes:"2-daily",spatialRes:"300 m",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:133,group:"TerVeg-TS",source:"Gross Primary Productivity",type:"vegetation structure, land cover",realm:"terrestrial",method:"multi-source integration",period:"1982-2016",temporalRes:"monthly",spatialRes:"8 km",future:false,past:false,bioclim:false,otherVars:false,ts:true},
+      {id:134,group:"TerVeg-TS",source:"ECOSTRESS",type:"vegetation structure, soil",realm:"terrestrial",method:"thermal remote sensing",period:"2018-present",temporalRes:"1-5 daily",spatialRes:"70 m",future:false,past:false,bioclim:false,otherVars:true,ts:true},
+    ];
+
+    const TOTAL = 134;
+
+    function parseSpatialRes(s) {
+      if (!s || s.includes("points") || s.includes("variable")) return Infinity;
+      const m = s.toLowerCase();
+      const secMatch = m.match(/(\d+(\.\d+)?)[''″'']/);
+      if (secMatch) return parseFloat(secMatch[1]) * 30;
+      const degMatch = m.match(/(\d+(\.\d+)?)\s*°/);
+      if (degMatch) return parseFloat(degMatch[1]) * 111000;
+      const kmMatch = m.match(/(\d+(\.\d+)?)\s*km/);
+      if (kmMatch) return parseFloat(kmMatch[1]) * 1000;
+      const mMatch = m.match(/^(\d+)\s*m/);
+      if (mMatch) return parseFloat(mMatch[1]);
+      return Infinity;
+    }
+
+    const ROWS = [
+      { label: ["FUTURE", "SCENARIOS"], key: "future", color: "#3B82F6", filter: d => d.future, annotations: [] },
+      { label: ["PALEO"], key: "past", color: "#F59E0B", filter: d => d.past, annotations: [] },
+      { label: ["HIGH RES", "SPATIAL", "(≤30 m)"], key: "highres", color: "#10B981", filter: d => parseSpatialRes(d.spatialRes) <= 30, annotations: [] },
+      { label: ["TEMPORAL", "SERIES"], key: "ts", color: "#8B5CF6", filter: d => d.ts, annotations: [] },
+      { label: ["BIOCLIM", "VARIABLES"], key: "bioclim", color: "#EF4444", filter: d => d.bioclim, annotations: [] },
+    ];
+
+    function getMatchingIds(filter) {
+      return new Set(datasets.filter(filter).map(d => d.id));
+    }
+
+    function getSegments(matchSet) {
+      const segments = [];
+      let start = null;
+      for (let i = 1; i <= TOTAL; i++) {
+        if (matchSet.has(i)) { if (start === null) start = i; }
+        else { if (start !== null) { segments.push({ start, end: i - 1 }); start = null; } }
+      }
+      if (start !== null) segments.push({ start, end: TOTAL });
+      return segments;
+    }
+
+    function App() {
+      const [activeFilters, setActiveFilters] = useState(new Set());
+      const [hoveredId, setHoveredId] = useState(null);
+      const svgRef = useRef(null);
+      const tooltipEl = document.getElementById("tooltip");
+
+      const BAR_H = 28;
+      const BAR_GAP = 52;
+      const LABEL_W = 115;
+      const PAD = { top: 32, right: 30, bottom: 55, left: LABEL_W };
+      const INNER_W = 860;
+      const SVG_W = INNER_W + PAD.left + PAD.right;
+      const SVG_H = ROWS.length * (BAR_H + BAR_GAP) + PAD.top + PAD.bottom + 20;
+
+      const xPos = id => ((id - 1) / (TOTAL - 1)) * INNER_W;
+      const xW = () => INNER_W / (TOTAL - 1);
+
+      const allMatchSets = ROWS.map(r => getMatchingIds(r.filter));
+
+      const activeMatchedIds = activeFilters.size === 0 ? null : (() => {
+        let result = null;
+        for (const key of activeFilters) {
+          const ri = ROWS.findIndex(r => r.key === key);
+          const matchSet = allMatchSets[ri];
+          if (result === null) { result = new Set(matchSet); }
+          else { for (const id of result) { if (!matchSet.has(id)) result.delete(id); } }
+        }
+        return result;
+      })();
+
+      function toggleFilter(key) {
+        setActiveFilters(prev => {
+          const n = new Set(prev);
+          n.has(key) ? n.delete(key) : n.add(key);
+          return n;
+        });
+      }
+
+      function showTooltip(e, d) {
+        setHoveredId(d.id);
+        const tags = [
+          d.future ? `<span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:1px 7px;font-size:10px">Future</span>` : "",
+          d.past   ? `<span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 7px;font-size:10px">Paleo</span>` : "",
+          d.bioclim? `<span style="background:#fee2e2;color:#991b1b;border-radius:4px;padding:1px 7px;font-size:10px">Bioclim</span>` : "",
+          d.ts     ? `<span style="background:#ede9fe;color:#5b21b6;border-radius:4px;padding:1px 7px;font-size:10px">Time Series</span>` : "",
+          d.otherVars?`<span style="background:#f0fdf4;color:#166534;border-radius:4px;padding:1px 7px;font-size:10px">Other Vars</span>` : "",
+        ].filter(Boolean).join(" ");
+
+        tooltipEl.innerHTML = `
+          <div style="font-weight:700;color:#1e293b;font-size:13px;margin-bottom:2px">
+            <span style="display:inline-block;background:#6366f1;color:white;border-radius:4px;padding:0 6px;font-size:10px;margin-right:6px;font-weight:600">#${d.id}</span>
+            ${d.source}
+          </div>
+          <div style="color:#475569;font-size:11px">${d.group}</div>
+          <div style="margin-top:6px;display:grid;grid-template-columns:auto 1fr;gap:2px 8px;font-size:11px">
+            <span style="color:#94a3b8">Type</span><span>${d.type}</span>
+            <span style="color:#94a3b8">Realm</span><span>${d.realm}</span>
+            <span style="color:#94a3b8">Period</span><span>${d.period || "—"}</span>
+            <span style="color:#94a3b8">Spatial</span><span>${d.spatialRes}</span>
+            <span style="color:#94a3b8">Temporal</span><span>${d.temporalRes}</span>
+            <span style="color:#94a3b8">Method</span><span>${d.method}</span>
+          </div>
+          ${tags ? `<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${tags}</div>` : ""}
+        `;
+        tooltipEl.style.display = "block";
+        positionTooltip(e);
+      }
+
+      function positionTooltip(e) {
+        const tw = 290, th = 200;
+        let left = e.clientX + 14;
+        let top = e.clientY - 10;
+        if (left + tw > window.innerWidth - 10) left = e.clientX - tw - 14;
+        if (top + th > window.innerHeight - 10) top = e.clientY - th;
+        tooltipEl.style.left = left + "px";
+        tooltipEl.style.top = top + "px";
+      }
+
+      function hideTooltip() {
+        tooltipEl.style.display = "none";
+        setHoveredId(null);
+      }
+
+      const tickIds = [];
+      for (let i = 1; i <= TOTAL; i += 10) tickIds.push(i);
+      tickIds.push(134);
+
+      return (
+        <div style={{ fontFamily: "'DM Mono', 'Courier New', monospace", background: "#f7f8fa", minHeight: "100vh", padding: "28px 20px" }}>
+          <div style={{ maxWidth: 1060, margin: "0 auto" }}>
+
+
+            {/* Filter buttons */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20, alignItems: "center" }}>
+              {ROWS.map(row => {
+                const active = activeFilters.has(row.key);
+                return (
+                  <button key={row.key} className="filter-btn" onClick={() => toggleFilter(row.key)}
+                    style={{ background: active ? row.color : "white", borderColor: row.color, color: active ? "white" : row.color }}>
+                    {row.label.join(" ")}
+                  </button>
+                );
+              })}
+              {activeFilters.size > 0 && (
+                <button className="filter-btn" onClick={() => setActiveFilters(new Set())}
+                  style={{ background: "white", borderColor: "#94a3b8", color: "#64748b" }}>
+                  ✕ Clear
+                </button>
+              )}
+              {activeMatchedIds && (
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: "#64748b", marginLeft: 6 }}>
+                  → <b style={{ color: "#1e293b" }}>{activeMatchedIds.size}</b> datasets match
+                </span>
+              )}
+            </div>
+
+            {/* SVG figure */}
+            <div style={{ background: "white", borderRadius: 12, boxShadow: "0 2px 16px rgba(0,0,0,0.07)", padding: "18px 10px 10px", overflowX: "auto" }}>
+              <svg ref={svgRef} width={SVG_W} height={SVG_H} style={{ display: "block", minWidth: 600 }}
+                onMouseLeave={hideTooltip}>
+
+                {ROWS.map((row, ri) => {
+                  const matchSet = allMatchSets[ri];
+                  const segments = getSegments(matchSet);
+                  const yBase = PAD.top + ri * (BAR_H + BAR_GAP);
+                  const isActiveFilter = activeFilters.has(row.key);
+
+                  return (
+                    <g key={row.key} transform={`translate(${PAD.left},${yBase})`}>
+                      {/* Label */}
+                      {row.label.map((t, i) => (
+                        <text key={i} x={-10} y={(BAR_H / 2) - ((row.label.length - 1) * 6) + i * 13}
+                          textAnchor="end" style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", fill: "#475569", fontWeight: 500 }}>
+                          {t}
+                        </text>
+                      ))}
+
+                      {/* Track */}
+                      <rect x={0} y={0} width={INNER_W} height={BAR_H} rx={4}
+                        fill={isActiveFilter ? "#e0f2fe" : "#f1f5f9"} />
+
+                      {/* Grid lines */}
+                      {tickIds.map(tick => (
+                        <line key={tick} x1={xPos(tick)} y1={0} x2={xPos(tick)} y2={BAR_H}
+                          stroke="#e2e8f0" strokeWidth={0.8} />
+                      ))}
+
+                      {/* Coloured segments */}
+                      {segments.map(({ start, end }) => {
+                        const x = xPos(start);
+                        const w = xPos(end) - xPos(start) + xW();
+                        const dimmed = activeMatchedIds &&
+                          ![...Array(end - start + 1)].some((_, k) => activeMatchedIds.has(start + k));
+                        return (
+                          <rect key={start} x={x} y={0} width={w} height={BAR_H} rx={2}
+                            fill={row.color} opacity={dimmed ? 0.15 : 0.9} />
+                        );
+                      })}
+
+                      {/* Hover targets (invisible, one per dataset) */}
+                      {datasets.map(d => (
+                        <rect key={d.id}
+                          x={xPos(d.id)} y={0}
+                          width={Math.max(xW(), 3)} height={BAR_H}
+                          fill="transparent" className="seg-hover"
+                          onMouseEnter={e => showTooltip(e, d)}
+                          onMouseMove={e => positionTooltip(e)}
+                        />
+                      ))}
+
+                      {/* Hovered ID marker */}
+                      {hoveredId && (
+                        <line x1={xPos(hoveredId) + xW() / 2} y1={0}
+                          x2={xPos(hoveredId) + xW() / 2} y2={BAR_H}
+                          stroke="#1e293b" strokeWidth={1.5} opacity={0.4} />
+                      )}
+
+                      {/* Annotations */}
+                      {row.annotations.map((ann, ai) => {
+                        const ids = ann.ids.filter(id => id >= 1 && id <= TOTAL);
+                        if (!ids.length) return null;
+                        const x1 = xPos(Math.min(...ids));
+                        const x2 = xPos(Math.max(...ids)) + xW();
+                        const cx = (x1 + x2) / 2;
+                        const isTop = ann.side === "top";
+                        const bY = isTop ? -3 : BAR_H + 3;
+                        const aY = isTop ? -14 : BAR_H + 16;
+                        const tY = isTop ? -18 : BAR_H + 30;
+
+                        return (
+                          <g key={ai}>
+                            <line x1={x1} y1={bY} x2={x2} y2={bY} stroke="#94a3b8" strokeWidth={1} />
+                            <line x1={cx} y1={bY} x2={cx} y2={aY} stroke="#94a3b8" strokeWidth={1} />
+                            {ann.label.map((line, li) => (
+                              <text key={li} x={cx} y={tY + li * 11} textAnchor="middle"
+                                style={{ fontSize: 9, fill: "#64748b", fontFamily: "'DM Mono', monospace" }}>
+                                {line}
+                              </text>
+                            ))}
+                          </g>
+                        );
+                      })}
+                    </g>
+                  );
+                })}
+
+                {/* X axis */}
+                <g transform={`translate(${PAD.left}, ${PAD.top + ROWS.length * (BAR_H + BAR_GAP) - BAR_GAP + BAR_H + 8})`}>
+                  <line x1={0} y1={6} x2={INNER_W} y2={6} stroke="#cbd5e1" strokeWidth={1.5} />
+                  {tickIds.map(tick => (
+                    <g key={tick}>
+                      <line x1={xPos(tick)} y1={3} x2={xPos(tick)} y2={9} stroke="#94a3b8" strokeWidth={1.2} />
+                      <text x={xPos(tick)} y={20} textAnchor="middle"
+                        style={{ fontSize: 9.5, fill: "#94a3b8", fontFamily: "'DM Mono', monospace" }}>
+                        {tick}
+                      </text>
+                    </g>
+                  ))}
+                  <text x={INNER_W / 2} y={36} textAnchor="middle"
+                    style={{ fontSize: 10, fill: "#94a3b8", fontFamily: "'DM Sans', sans-serif" }}>
+                    Data IDs
+                  </text>
+                </g>
+              </svg>
+            </div>
+
+            <div style={{ marginTop: 12, fontSize: 11, fontFamily: "'DM Sans', sans-serif", color: "#64748b" }}>
+              Hover any ID to explore dataset details · Click filter buttons to intersect criteria
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
